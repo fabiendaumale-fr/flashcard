@@ -784,28 +784,40 @@ function startQuiz() {
 function renderQuiz() {
   const el = document.getElementById('quizContent');
   if (quizQueue.length === 0) {
-    el.innerHTML = `<div class="no-cards-today"><div class="icon">🌟</div><h3>Rien à réviser aujourd'hui !</h3><p>Crée de nouvelles cartes ou reviens demain.</p></div>`;
+    el.innerHTML = '<div class="no-cards-today"><div class="icon">\u{1F31F}</div><h3>Rien à réviser aujourd\'hui !</h3><p>Crée de nouvelles cartes ou reviens demain.</p></div>';
     return;
   }
   if (quizIndex >= quizQueue.length) { renderQuizEnd(); return; }
   const card = quizQueue[quizIndex];
   const t = getTheme(card.theme);
   const total = quizQueue.length;
-  el.innerHTML = `
-    <div class="quiz-progress">
-      <div class="progress-label"><span>Carte ${quizIndex+1} / ${total}</span><span>✅ ${quizGood} · ❌ ${quizBad}</span></div>
-      <div class="progress-bar-bg"><div class="progress-bar" style="width:${(quizIndex/total)*100}%"></div></div>
-    </div>
-    <div class="quiz-card" id="quizCard">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
-        <div class="quiz-theme-badge">${t.icon} ${t.label}</div>
-        <div class="quiz-level">Niveau ${LEVEL_LABELS[card.levelIndex]||'?'}</div>
-      </div>
-      <div class="quiz-question">${card.questionImg ? `<img class="quiz-img" src="${card.questionImg}">` : escHtml(card.question)}</div>
-      <div id="quizAnswerZone">
-        <div style="margin-top:24px"><button class="btn-see" onclick="showAnswer()">👁️ Voir la réponse</button></div>
-      </div>
-    </div>`;
+  const li = card.levelIndex;
+  const levelDotsHTML = LEVEL_LABELS.map((lbl, i) => {
+    const cls = i < li ? 'done' : i === li ? 'current' : '';
+    return '<div class="level-dot ' + cls + '">' + lbl.replace('J+','') + '</div>';
+  }).join('');
+  const questionHTML = card.questionImg
+    ? '<img class="quiz-img" src="' + card.questionImg + '">'
+    : escHtml(card.question);
+  el.innerHTML =
+    '<div class="quiz-progress">' +
+      '<div class="progress-label"><span>Carte ' + (quizIndex+1) + ' / ' + total + '</span><span>\u2705 ' + quizGood + ' \u00B7 \u274C ' + quizBad + '</span></div>' +
+      '<div class="progress-bar-bg"><div class="progress-bar" style="width:' + Math.round((quizIndex/total)*100) + '%"></div></div>' +
+    '</div>' +
+    '<div class="quiz-card" id="quizCard">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">' +
+        '<div class="quiz-theme-badge">' + t.icon + ' ' + t.label + '</div>' +
+      '</div>' +
+      '<div class="quiz-question">' + questionHTML + '</div>' +
+      '<div id="quizAnswerZone">' +
+        '<div style="margin-top:24px"><button class="btn-see" onclick="showAnswer()">\u{1F441}\uFE0F Voir la r\u00E9ponse</button></div>' +
+      '</div>' +
+      '<div class="level-progress" style="margin-top:20px">' +
+        '<div style="font-size:11px;font-weight:800;color:var(--text2);text-align:center;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Progression de cette carte</div>' +
+        '<div class="level-dots">' + levelDotsHTML + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<button class="btn-stop-session" onclick="stopSession()">\u23F9 Arr\u00EAter la session</button>';
 }
 
 function showAnswer() {
