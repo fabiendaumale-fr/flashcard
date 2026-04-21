@@ -522,12 +522,84 @@ function setSyncStatus(cls, label) {
 // ── HELPERS ──
 function getTheme(key) { return THEMES.find(t => t.key === key) || { label: key, icon: '❓' }; }
 
+const MAX_RESERVE_PER_DAY = 20;
+
+function getSessionKey() {
+  // Key for today's session data: "session_YYYY-MM-DD"
+  const d = new Date();
+  return 'memocards_session_' + d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function loadSession() {
+  try { return JSON.parse(localStorage.getItem(getSessionKey()) || '{}'); } catch(e) { return {}; }
+}
+
+function saveSession(data) {
+  // Clean up old session keys (keep only today)
+  const key = getSessionKey();
+  Object.keys(localStorage).filter(k => k.startsWith('memocards_session_') && k !== key).forEach(k => localStorage.removeItem(k));
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
 function getDueCards(cards) {
   const t = today();
-  return cards.filter(c => {
-    if (c.levelIndex >= LEVELS.length) return false;
-    return (c.lastReview + LEVELS[c.levelIndex] * 86400000) <= t;
-  }).sort((a,b) => a.levelIndex - b.levelIndex);
+  const session = loadSession();
+  // Already done today
+  const doneTodayIds = new Set(session.done || []);
+  // Cards in play (level > 0, not mastered, due today)
+  const inPlay = cards.filter(c =>
+    c.levelIndex > 0 &&
+    c.levelIndex < LEVELS.length &&
+    (c.lastReview + LEVELS[c.levelIndex] * 86400000) <= t &&
+    !doneTodayIds.has(c.id)
+  ).sort((a,b) => b.levelIndex - a.levelIndex); // highest level first
+
+  // Reserve cards = level 0, not mastered, not already selected today
+  const selectedReserveIds = new Set(session.reserveIds || []);
+  let reserve = cards.filter(c =>
+    c.levelIndex === 0 &&
+    c.levelIndex < LEVELS.length &&
+    !doneTodayIds.has(c.id) &&
+    !selectedReserveIds.has(c.id)
+  );
+
+  // How many reserve slots available today
+  const reserveSlotsUsed = (session.reserveIds || []).filter(id => !doneTodayIds.has(id)).length;
+  const reserveSlotsFree = Math.max(0, MAX_RESERVE_PER_DAY - reserveSlotsUsed);
+
+  // Pick new reserve cards if needed (shuffle then slice)
+  if (reserveSlotsFree > 0 && reserve.length > 0) {
+    // shuffle reserve
+    for (let i = reserve.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [reserve[i], reserve[j]] = [reserve[j], reserve[i]];
+    }
+    const newOnes = reserve.slice(0, reserveSlotsFree);
+    const updatedReserveIds = [...(session.reserveIds || []), ...newOnes.map(c => c.id)];
+    saveSession({ ...session, reserveIds: updatedReserveIds });
+    // Add newly selected reserve cards
+    reserve = newOnes;
+  } else {
+    // Only keep already-selected reserve cards that aren't done
+    reserve = cards.filter(c =>
+      c.levelIndex === 0 &&
+      selectedReserveIds.has(c.id) &&
+      !doneTodayIds.has(c.id)
+    );
+  }
+
+  return [...inPlay, ...reserve];
+}
+
+function markCardDoneToday(id) {
+  const session = loadSession();
+  const done = new Set(session.done || []);
+  done.add(id);
+  saveSession({ ...session, done: [...done] });
+}
+
+function getRemainingCount() {
+  return getDueCards(loadCards()).length;
 }
 
 function daysUntilNext(card) {
@@ -558,8 +630,9 @@ function goHome() { showPage('home'); }
 function renderHome() {
   const cards = loadCards();
   const due = getDueCards(cards);
-  document.getElementById('todayCount').textContent = due.length;
-  document.getElementById('reviseSubtext').textContent = due.length > 0 ? `${due.length} carte(s) aujourd'hui` : 'rien à faire !';
+  const remaining = due.length;
+  document.getElementById('todayCount').textContent = remaining;
+  document.getElementById('reviseSubtext').textContent = remaining > 0 ? `${remaining} carte(s) restante(s)` : 'tout est fait !';
   const h = new Date().getHours();
   document.getElementById('greetingText').textContent = h < 12 ? 'Bonjour !' : h < 18 ? 'Bon après-midi !' : 'Bonsoir !';
 
@@ -1093,6 +1166,7 @@ async function answerCard(correct) {
   }
 
   await saveCards(cards);
+  markCardDoneToday(card.id);
   const cardEl = document.getElementById('quizCard');
   if (cardEl) { cardEl.style.cssText += `;transform:translateX(${correct?60:-60}px);opacity:0;transition:all 0.3s`; }
   quizIndex++;
