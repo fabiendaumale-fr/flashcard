@@ -184,6 +184,40 @@
   .img-remove { position: absolute; top: 8px; right: 8px; background: var(--danger); color: #fff; border: none; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; }
   .quiz-img { width: 100%; max-height: 260px; object-fit: contain; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--surface2); display: block; margin-bottom: 8px; }
 
+
+  /* MASTERED CARD CELEBRATION */
+  .mastered-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 500; display: flex; align-items: center; justify-content: center; padding: 24px; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  .mastered-box { background: var(--surface); border-radius: var(--radius); padding: 36px 28px; max-width: 340px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.3); animation: popIn 0.4s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes popIn { from{transform:scale(0.7);opacity:0} to{transform:scale(1);opacity:1} }
+  .mastered-trophy { font-size: 72px; margin-bottom: 12px; animation: bounce 0.7s ease; }
+  .mastered-box h3 { font-size: 24px; font-weight: 900; margin-bottom: 8px; color: var(--text); }
+  .mastered-box p { font-size: 14px; color: var(--text2); margin-bottom: 20px; line-height: 1.5; }
+  .mastered-box .btn-continue { background: var(--primary); color: #fff; border: none; border-radius: var(--radius-sm); padding: 13px 28px; font-family: 'Baloo 2', sans-serif; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .mastered-box .btn-continue:hover { background: var(--primary-dark); }
+
+  /* LEVEL PROGRESS in quiz */
+  .level-progress { margin-top: 16px; }
+  .level-dots { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .level-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; border: 2px solid var(--border); color: var(--text2); background: var(--surface2); transition: all 0.3s; flex-shrink: 0; }
+  .level-dot.done { background: var(--success); border-color: var(--success); color: #fff; }
+  .level-dot.current { background: var(--primary); border-color: var(--primary); color: #fff; transform: scale(1.2); }
+
+  /* STOP SESSION button */
+  .btn-stop-session { background: none; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 8px 16px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 700; color: var(--text2); cursor: pointer; transition: all 0.2s; margin-top: 16px; width: 100%; }
+  .btn-stop-session:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-light); }
+
+  /* CLICKABLE theme chips */
+  .theme-chip { cursor: pointer; transition: all 0.18s; }
+  .theme-chip:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+
+  /* MASTERED count on home */
+  .mastered-strip { display: flex; align-items: center; justify-content: center; gap: 8px; background: #fef3c7; border: 1.5px solid #fcd34d; border-radius: var(--radius-sm); padding: 10px 16px; margin-bottom: 20px; font-size: 14px; font-weight: 700; color: #92400e; cursor: pointer; transition: all 0.2s; }
+  .mastered-strip:hover { background: #fde68a; }
+
+  /* RESET card button in list */
+  .reset-btn { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--text2); padding: 4px; border-radius: 8px; transition: all 0.18s; flex-shrink: 0; }
+  .reset-btn:hover { background: var(--primary-light); color: var(--primary); }
   .confetti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9999; overflow: hidden; }
   .confetti-piece { position: absolute; width: 10px; height: 10px; border-radius: 2px; animation: confettiFall linear forwards; }
   @keyframes confettiFall { 0%{transform:translateY(-20px) rotate(0deg);opacity:1} 100%{transform:translateY(100vh) rotate(720deg);opacity:0} }
@@ -242,6 +276,7 @@
       <div class="btn-sub">une nouvelle carte</div>
     </div>
   </div>
+  <div id="masteredStrip"></div>
   <div style="margin-bottom: 20px;">
     <div class="section-title">Mes thèmes</div>
     <div class="theme-chips" id="homeThemeChips"></div>
@@ -517,7 +552,15 @@ function renderHome() {
   const chipsEl = document.getElementById('homeThemeChips');
   chipsEl.innerHTML = Object.keys(counts).length === 0
     ? '<span style="color:var(--text2);font-size:13px;font-weight:600">Aucune carte pour l\'instant</span>'
-    : Object.entries(counts).map(([k,n]) => { const t = getTheme(k); return `<div class="theme-chip"><span>${t.icon}</span>${t.label} <strong>${n}</strong></div>`; }).join('');
+    : Object.entries(counts).map(([k,n]) => { const t = getTheme(k); return `<div class="theme-chip" onclick="showListFiltered('${k}')" title="Voir les cartes ${t.label}"><span>${t.icon}</span>${t.label} <strong>${n}</strong></div>`; }).join('');
+
+  const masteredCount = cards.filter(c => c.levelIndex >= LEVELS.length).length;
+  const stripEl = document.getElementById('masteredStrip');
+  if (masteredCount > 0) {
+    stripEl.innerHTML = `<div class="mastered-strip" onclick="renderList('mastered')">
+      🏆 ${masteredCount} carte(s) maîtrisée(s) — voir l'archive
+    </div>`;
+  } else { stripEl.innerHTML = ''; }
 
   const recentEl = document.getElementById('homeRecentCards');
   recentEl.innerHTML = cards.length === 0
@@ -673,6 +716,63 @@ async function createCard() {
 }
 
 // ── QUIZ ──
+function renderLevelDots(card) {
+  const el = document.getElementById('levelDotsZone');
+  if (!el) return;
+  const li = card.levelIndex;
+  el.innerHTML = `<div class="level-progress">
+    <div class="level-dots">
+      ${LEVEL_LABELS.map((lbl, i) => {
+        const cls = i < li ? 'done' : i === li ? 'current' : '';
+        return `<div class="level-dot ${cls}">${lbl.replace('J+','')}</div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function stopSession() {
+  if (!confirm('Arrêter la session et voir le résumé ?')) return;
+  renderQuizEnd();
+}
+
+function showListFiltered(theme) {
+  showPage('list');
+  renderList(theme);
+}
+
+async function resetCard(id, e) {
+  e.stopPropagation();
+  if (!confirm('Remettre cette carte en révision depuis le début ?')) return;
+  const cards = loadCards();
+  const idx = cards.findIndex(c => c.id === id);
+  if (idx === -1) return;
+  cards[idx].levelIndex = 0;
+  cards[idx].lastReview = today() - 86400000;
+  await saveCards(cards);
+  showToast('🔄 Carte remise en révision !', 'success');
+  renderList(activeFilter);
+  renderHome();
+}
+
+function showMasteredOverlay(card) {
+  const t = getTheme(card.theme);
+  const overlay = document.createElement('div');
+  overlay.className = 'mastered-overlay';
+  overlay.innerHTML = `
+    <div class="mastered-box">
+      <div class="mastered-trophy">🏆</div>
+      <h3>Carte maîtrisée !</h3>
+      <p>Tu as répondu correctement 7 fois de suite.<br>
+      <strong>${card.questionImg ? '🖼️ Image' : escHtml(card.question)}</strong><br>
+      est maintenant dans ton archive !</p>
+      <button class="btn-continue" onclick="this.closest('.mastered-overlay').remove()">Continuer →</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  launchConfetti(30);
+  playSound('win');
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
 let quizQueue = [], quizIndex = 0, quizGood = 0, quizBad = 0;
 
 function startQuiz() {
@@ -732,8 +832,7 @@ async function answerCard(correct) {
     quizGood++;
     const newLevel = card.levelIndex + 1;
     if (newLevel >= LEVELS.length) {
-      showToast('🏆 Carte maîtrisée !', 'win');
-      launchConfetti(20);
+      showMasteredOverlay(card);
       cards[idx].levelIndex = LEVELS.length;
       cards[idx].lastReview = today();
     } else {
@@ -783,10 +882,12 @@ function renderList(filter) {
   activeFilter = filter;
   const cards = loadCards();
   const used = [...new Set(cards.map(c => c.theme))];
+  const masteredCards = cards.filter(c => c.levelIndex >= LEVELS.length);
   document.getElementById('listFilters').innerHTML =
     `<button class="filter-btn ${!filter?'active':''}" onclick="renderList(null)">Tous (${cards.length})</button>` +
+    `<button class="filter-btn ${filter==='mastered'?'active':''}" onclick="renderList('mastered')" style="border-color:#fcd34d;color:#92400e;background:${filter==='mastered'?'#fef3c7':''}">🏆 Maîtrisées (${masteredCards.length})</button>` +
     used.map(k => { const t=getTheme(k), n=cards.filter(c=>c.theme===k).length; return `<button class="filter-btn ${filter===k?'active':''}" onclick="renderList('${k}')">${t.icon} ${t.label} (${n})</button>`; }).join('');
-  const filtered = filter ? cards.filter(c => c.theme===filter) : cards;
+  const filtered = filter === 'mastered' ? masteredCards : filter ? cards.filter(c => c.theme===filter) : cards;
   document.getElementById('listContent').innerHTML = filtered.length === 0
     ? `<div class="empty-state"><div class="empty-icon">📭</div><p>Aucune carte ici.</p><button onclick="showPage('create')">Créer une carte</button></div>`
     : filtered.slice().reverse().map(c => cardItemHTML(c)).join('');
@@ -813,6 +914,36 @@ function launchConfetti(count) {
     el.appendChild(p);
   }
   setTimeout(() => el.innerHTML='', 3000);
+}
+
+// ── SOUNDS ──
+function playSound(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (type === 'win') {
+      // ascending arpeggio
+      [[523,0],[659,0.15],[784,0.3],[1047,0.45]].forEach(([freq, delay]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = freq; o.type = 'sine';
+        g.gain.setValueAtTime(0.3, ctx.currentTime + delay);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.4);
+        o.start(ctx.currentTime + delay);
+        o.stop(ctx.currentTime + delay + 0.4);
+      });
+    } else if (type === 'end') {
+      // fanfare
+      [[523,0],[659,0.1],[784,0.2],[659,0.4],[784,0.5],[1047,0.6]].forEach(([freq, delay]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = freq; o.type = 'triangle';
+        g.gain.setValueAtTime(0.25, ctx.currentTime + delay);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.5);
+        o.start(ctx.currentTime + delay);
+        o.stop(ctx.currentTime + delay + 0.5);
+      });
+    }
+  } catch(e) {}
 }
 
 // ── IMPORT ──
