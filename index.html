@@ -142,6 +142,7 @@
   .card-item-icon { font-size: 26px; flex-shrink: 0; }
   .card-item-body { flex: 1; min-width: 0; }
   .card-item-q { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .card-item-thumb { width: 72px; height: 54px; object-fit: cover; border-radius: 8px; border: 1.5px solid var(--border); flex-shrink: 0; }
   .card-item-a { font-size: 13px; color: var(--text2); }
   .card-item-meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
   .level-badge { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background: var(--primary-light); color: var(--primary); }
@@ -588,16 +589,20 @@ function cardItemHTML(c) {
   const done = c.levelIndex >= LEVELS.length;
   const days = daysUntilNext(c);
   const nextLabel = done ? '✅ Apprise !' : (days !== null && days <= 0 ? '🔥 À réviser' : `⏳ dans ${days}j`);
+  const qContent = c.questionImg
+    ? `<img src="${c.questionImg}" style="width:100%;max-height:80px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border);display:block;margin-bottom:4px;">`
+    : `<div class="card-item-q">${escHtml(c.question)}</div>`;
   return `<div class="card-item">
     <div class="card-item-icon">${t.icon}</div>
     <div class="card-item-body">
-      <div class="card-item-q">${c.questionImg ? '🖼️ <em>Image</em>' : escHtml(c.question)}</div>
-      <div class="card-item-a">${c.answerImg ? '🖼️ <em>Image</em>' : escHtml(c.answer)}</div>
+      ${qContent}
+      <div class="card-item-a">${escHtml(c.answer || '')}</div>
       <div class="card-item-meta">
         <span class="level-badge">${done ? '🏆 Maîtrisée' : (LEVEL_LABELS[c.levelIndex]||'?')}</span>
         <span class="next-badge">${nextLabel}</span>
       </div>
     </div>
+    ${done ? `<button class="reset-btn" onclick="resetCard('${c.id}',event)" title="Remettre en révision">🔄</button>` : ''}
     <button class="delete-btn" onclick="deleteCard('${c.id}',event)">🗑️</button>
   </div>`;
 }
@@ -674,17 +679,15 @@ function showCropOverlay(imgUrl, field, onDone) {
   overlay.id = 'cropOverlay';
 
   const RATIO = 4/3;
-  const MAX_W = Math.min(window.innerWidth - 32, 560);
-  const MAX_H = Math.min(window.innerHeight - 220, 500);
+  const MAX_W = Math.min(window.innerWidth - 32, 520);
+  const MAX_H = Math.min(window.innerHeight - 180, 440);
 
   const srcImg = new Image();
   srcImg.onload = () => {
-    // Scale image to fit screen
     let dispW = srcImg.width, dispH = srcImg.height;
     if (dispW > MAX_W) { dispH = Math.round(dispH * MAX_W / dispW); dispW = MAX_W; }
     if (dispH > MAX_H) { dispW = Math.round(dispW * MAX_H / dispH); dispH = MAX_H; }
 
-    // Initial crop box: centered, 4:3, 80% of display
     let cropW = Math.round(dispW * 0.85);
     let cropH = Math.round(cropW / RATIO);
     if (cropH > dispH * 0.85) { cropH = Math.round(dispH * 0.85); cropW = Math.round(cropH * RATIO); }
@@ -693,60 +696,77 @@ function showCropOverlay(imgUrl, field, onDone) {
 
     cropState = { srcImg, dispW, dispH, cropX, cropY, cropW, cropH, field, RATIO, dragging: null, startX: 0, startY: 0, origCrop: null };
 
+    // Use a single SVG overlay on canvas instead of separate DOM handles
     overlay.innerHTML =
-      '<div class="crop-title">Recadre ta photo (ratio 4:3)</div>' +
-      '<div class="crop-hint">Glisse la zone ou les poignées pour ajuster</div>' +
-      '<div class="crop-canvas-wrap" id="cropWrap" style="width:' + dispW + 'px;height:' + dispH + 'px">' +
-        '<canvas id="cropCanvas" width="' + dispW + '" height="' + dispH + '"></canvas>' +
-        '<div class="crop-selection" id="cropSel"></div>' +
-        '<div class="crop-handle" id="ch-tl" style="top:0;left:0" data-handle="tl"></div>' +
-        '<div class="crop-handle" id="ch-tr" style="top:0;right:0;transform:translate(50%,-50%)" data-handle="tr"></div>' +
-        '<div class="crop-handle" id="ch-bl" style="bottom:0;left:0;transform:translate(-50%,50%)" data-handle="bl"></div>' +
-        '<div class="crop-handle" id="ch-br" style="bottom:0;right:0;transform:translate(50%,50%)" data-handle="br"></div>' +
+      '<div class="crop-title">Recadre ta photo (4:3)</div>' +
+      '<div class="crop-hint">Glisse la zone bleue · poignées aux coins pour redimensionner</div>' +
+      '<div class="crop-canvas-wrap" id="cropWrap" style="width:' + dispW + 'px;height:' + dispH + 'px;position:relative;cursor:move;">' +
+        '<canvas id="cropCanvas" width="' + dispW + '" height="' + dispH + '" style="display:block;border-radius:8px;"></canvas>' +
       '</div>' +
-      '<div class="crop-btns">' +
+      '<div class="crop-btns" style="margin-top:16px">' +
         '<button class="crop-btn-cancel" onclick="closeCropOverlay()">Annuler</button>' +
-        '<button class="crop-btn-ok" onclick="confirmCrop()">✓ Valider le recadrage</button>' +
+        '<button class="crop-btn-ok" onclick="confirmCrop()">✓ Valider</button>' +
       '</div>';
 
     document.body.appendChild(overlay);
 
-    // Draw image on canvas
     const canvas = document.getElementById('cropCanvas');
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(srcImg, 0, 0, dispW, dispH);
-
     cropState.canvas = canvas;
-    cropState.ctx = ctx;
     cropState.onDone = onDone;
 
-    updateCropUI();
+    drawCrop();
     setupCropDrag();
   };
   srcImg.src = imgUrl;
 }
 
-function updateCropUI() {
-  const { cropX, cropY, cropW, cropH } = cropState;
-  const sel = document.getElementById('cropSel');
-  if (!sel) return;
-  sel.style.cssText = 'position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,0.55);' +
-    'left:' + cropX + 'px;top:' + cropY + 'px;width:' + cropW + 'px;height:' + cropH + 'px;';
-  // position handles
-  const handles = { tl: [cropX, cropY], tr: [cropX+cropW, cropY], bl: [cropX, cropY+cropH], br: [cropX+cropW, cropY+cropH] };
-  Object.entries(handles).forEach(([k,[x,y]]) => {
-    const h = document.getElementById('ch-' + k);
-    if (h) h.style.cssText = 'position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;' +
-      'left:' + x + 'px;top:' + y + 'px;transform:translate(-50%,-50%);cursor:grab;pointer-events:all;';
+function drawCrop() {
+  const { srcImg, dispW, dispH, cropX, cropY, cropW, cropH, canvas } = cropState;
+  const ctx = canvas.getContext('2d');
+  // Draw base image
+  ctx.clearRect(0, 0, dispW, dispH);
+  ctx.drawImage(srcImg, 0, 0, dispW, dispH);
+  // Darken outside crop
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, dispW, cropY);
+  ctx.fillRect(0, cropY + cropH, dispW, dispH - cropY - cropH);
+  ctx.fillRect(0, cropY, cropX, cropH);
+  ctx.fillRect(cropX + cropW, cropY, dispW - cropX - cropW, cropH);
+  // Border
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cropX, cropY, cropW, cropH);
+  // Grid lines (rule of thirds)
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 3; i++) {
+    ctx.beginPath(); ctx.moveTo(cropX + cropW*i/3, cropY); ctx.lineTo(cropX + cropW*i/3, cropY+cropH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cropX, cropY + cropH*i/3); ctx.lineTo(cropX+cropW, cropY + cropH*i/3); ctx.stroke();
+  }
+  // Corner handles — draw as filled squares on canvas
+  const hs = 14;
+  ctx.fillStyle = '#ffffff';
+  [[cropX, cropY],[cropX+cropW, cropY],[cropX, cropY+cropH],[cropX+cropW, cropY+cropH]].forEach(([x,y]) => {
+    ctx.fillRect(x - hs/2, y - hs/2, hs, hs);
   });
 }
 
+function getHitZone(x, y) {
+  const { cropX, cropY, cropW, cropH } = cropState;
+  const hs = 20; // hit size for handles
+  if (Math.abs(x - cropX) < hs && Math.abs(y - cropY) < hs) return 'tl';
+  if (Math.abs(x - (cropX+cropW)) < hs && Math.abs(y - cropY) < hs) return 'tr';
+  if (Math.abs(x - cropX) < hs && Math.abs(y - (cropY+cropH)) < hs) return 'bl';
+  if (Math.abs(x - (cropX+cropW)) < hs && Math.abs(y - (cropY+cropH)) < hs) return 'br';
+  if (x > cropX && x < cropX+cropW && y > cropY && y < cropY+cropH) return 'move';
+  return null;
+}
+
 function setupCropDrag() {
-  const wrap = document.getElementById('cropWrap');
-  if (!wrap) return;
+  const canvas = cropState.canvas;
 
   function getPos(e) {
-    const r = wrap.getBoundingClientRect();
+    const r = canvas.getBoundingClientRect();
     const src = e.touches ? e.touches[0] : e;
     return { x: src.clientX - r.left, y: src.clientY - r.top };
   }
@@ -754,69 +774,75 @@ function setupCropDrag() {
   function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
 
   function onStart(e) {
-    e.preventDefault();
     const pos = getPos(e);
-    const handle = e.target.dataset && e.target.dataset.handle;
-    if (handle) {
-      cropState.dragging = handle;
-    } else if (e.target.id === 'cropSel' || e.target.id === 'cropCanvas') {
-      cropState.dragging = 'move';
-    } else { return; }
+    const zone = getHitZone(pos.x, pos.y);
+    if (!zone) return;
+    e.preventDefault();
+    cropState.dragging = zone;
     cropState.startX = pos.x;
     cropState.startY = pos.y;
-    cropState.origCrop = { ...cropState };
+    cropState.origCrop = { cropX: cropState.cropX, cropY: cropState.cropY, cropW: cropState.cropW, cropH: cropState.cropH };
+    canvas.style.cursor = zone === 'move' ? 'grabbing' : 'nwse-resize';
   }
 
   function onMove(e) {
+    if (!cropState || !cropState.dragging) return;
     e.preventDefault();
-    if (!cropState.dragging) return;
     const pos = getPos(e);
     const dx = pos.x - cropState.startX;
     const dy = pos.y - cropState.startY;
     const { dispW, dispH, RATIO } = cropState;
     let { cropX, cropY, cropW, cropH } = cropState.origCrop;
+    const d = cropState.dragging;
 
-    if (cropState.dragging === 'move') {
-      cropX = clamp(cropX + dx, 0, dispW - cropW);
-      cropY = clamp(cropY + dy, 0, dispH - cropH);
-      cropState.cropX = cropX; cropState.cropY = cropY;
+    if (d === 'move') {
+      cropState.cropX = clamp(cropX + dx, 0, dispW - cropW);
+      cropState.cropY = clamp(cropY + dy, 0, dispH - cropH);
     } else {
-      // Resize maintaining 4:3 ratio — use dx as primary, compute dy from ratio
-      const d = cropState.dragging;
+      let newW = cropW, newX = cropX, newY = cropY;
       if (d === 'br') {
-        cropW = clamp(cropW + dx, 60, dispW - cropX);
-        cropH = Math.round(cropW / RATIO);
-        if (cropY + cropH > dispH) { cropH = dispH - cropY; cropW = Math.round(cropH * RATIO); }
-      } else if (d === 'tl') {
-        const newW = clamp(cropW - dx, 60, cropX + cropW);
-        cropH = Math.round(newW / RATIO);
-        cropX = (cropX + cropW) - newW;
-        cropY = (cropState.origCrop.cropY + cropState.origCrop.cropH) - cropH;
-        cropW = newW;
-      } else if (d === 'tr') {
-        cropW = clamp(cropW + dx, 60, dispW - cropX);
-        cropH = Math.round(cropW / RATIO);
-        cropY = (cropState.origCrop.cropY + cropState.origCrop.cropH) - cropH;
+        newW = clamp(cropW + dx, 60, dispW - cropX);
       } else if (d === 'bl') {
-        const newW = clamp(cropW - dx, 60, cropX + cropW);
-        cropH = Math.round(newW / RATIO);
-        cropX = (cropX + cropW) - newW;
-        cropW = newW;
+        newW = clamp(cropW - dx, 60, cropX + cropW);
+        newX = cropX + cropW - newW;
+      } else if (d === 'tr') {
+        newW = clamp(cropW + dx, 60, dispW - cropX);
+      } else if (d === 'tl') {
+        newW = clamp(cropW - dx, 60, cropX + cropW);
+        newX = cropX + cropW - newW;
       }
-      cropState.cropX = Math.round(clamp(cropX, 0, dispW - cropW));
-      cropState.cropY = Math.round(clamp(cropY, 0, dispH - cropH));
-      cropState.cropW = Math.round(cropW);
-      cropState.cropH = Math.round(cropH);
+      const newH = Math.round(newW / RATIO);
+      // anchor bottom for top handles, top for bottom handles
+      if (d === 'tl' || d === 'tr') newY = cropY + cropH - newH;
+      if (newY < 0) { newY = 0; }
+      if (newY + newH > dispH) { newY = dispH - newH; }
+      if (newX < 0) newX = 0;
+      cropState.cropX = Math.round(newX);
+      cropState.cropY = Math.round(newY);
+      cropState.cropW = Math.round(newW);
+      cropState.cropH = Math.round(newH);
     }
-    updateCropUI();
+    drawCrop();
   }
 
-  function onEnd() { cropState.dragging = null; }
+  function onEnd() {
+    if (cropState) { cropState.dragging = null; canvas.style.cursor = 'move'; }
+  }
 
-  wrap.addEventListener('mousedown', onStart);
-  wrap.addEventListener('touchstart', onStart, { passive: false });
-  window.addEventListener('mousemove', onMove);
-  window.addEventListener('touchmove', onMove, { passive: false });
+  function onHover(e) {
+    if (cropState && !cropState.dragging) {
+      const pos = getPos(e);
+      const zone = getHitZone(pos.x, pos.y);
+      canvas.style.cursor = !zone ? 'default' : zone === 'move' ? 'grab' : 'nwse-resize';
+    }
+  }
+
+  canvas.addEventListener('mousedown', onStart);
+  canvas.addEventListener('touchstart', onStart, { passive: false });
+  canvas.addEventListener('mousemove', onHover);
+  // Use canvas-scoped move/end to avoid blocking page scroll
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('touchmove', onMove, { passive: false });
   window.addEventListener('mouseup', onEnd);
   window.addEventListener('touchend', onEnd);
 }
