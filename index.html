@@ -218,6 +218,21 @@
   /* RESET card button in list */
   .reset-btn { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--text2); padding: 4px; border-radius: 8px; transition: all 0.18s; flex-shrink: 0; }
   .reset-btn:hover { background: var(--primary-light); color: var(--primary); }
+
+  /* CROP OVERLAY */
+  .crop-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  .crop-title { color: #fff; font-size: 15px; font-weight: 800; margin-bottom: 12px; text-align: center; }
+  .crop-hint { color: rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 16px; text-align: center; }
+  .crop-canvas-wrap { position: relative; touch-action: none; cursor: crosshair; flex-shrink: 0; }
+  .crop-canvas-wrap canvas { display: block; border-radius: 8px; }
+  .crop-selection { position: absolute; border: 2px solid #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); pointer-events: none; }
+  .crop-handle { position: absolute; width: 18px; height: 18px; background: #fff; border-radius: 50%; transform: translate(-50%,-50%); pointer-events: all; cursor: grab; }
+  .crop-btns { display: flex; gap: 12px; margin-top: 16px; }
+  .crop-btn-ok { background: var(--primary); color: #fff; border: none; border-radius: var(--radius-sm); padding: 12px 28px; font-family: 'Baloo 2', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .crop-btn-cancel { background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: var(--radius-sm); padding: 12px 20px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .crop-ratio-btns { display: flex; gap: 8px; margin-bottom: 14px; }
+  .crop-ratio-btn { background: rgba(255,255,255,0.15); color: #fff; border: 1.5px solid rgba(255,255,255,0.3); border-radius: 20px; padding: 5px 14px; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.18s; }
+  .crop-ratio-btn.active { background: var(--primary); border-color: var(--primary); }
   .confetti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9999; overflow: hidden; }
   .confetti-piece { position: absolute; width: 10px; height: 10px; border-radius: 2px; animation: confettiFall linear forwards; }
   @keyframes confettiFall { 0%{transform:translateY(-20px) rotate(0deg);opacity:1} 100%{transform:translateY(100vh) rotate(720deg);opacity:0} }
@@ -645,8 +660,193 @@ function removeImg(field) {
 async function handleImg(event, field) {
   const file = event.target.files[0];
   if (!file) return;
-  const compressed = await compressImage(file, 800, 0.72);
-  if (field === 'q') qImage = compressed; else aImage = compressed;
+  const url = URL.createObjectURL(file);
+  showCropOverlay(url, field, () => URL.revokeObjectURL(url));
+  event.target.value = '';
+}
+
+// ── CROP ──
+let cropState = null;
+
+function showCropOverlay(imgUrl, field, onDone) {
+  const overlay = document.createElement('div');
+  overlay.className = 'crop-overlay';
+  overlay.id = 'cropOverlay';
+
+  const RATIO = 4/3;
+  const MAX_W = Math.min(window.innerWidth - 32, 560);
+  const MAX_H = Math.min(window.innerHeight - 220, 500);
+
+  const srcImg = new Image();
+  srcImg.onload = () => {
+    // Scale image to fit screen
+    let dispW = srcImg.width, dispH = srcImg.height;
+    if (dispW > MAX_W) { dispH = Math.round(dispH * MAX_W / dispW); dispW = MAX_W; }
+    if (dispH > MAX_H) { dispW = Math.round(dispW * MAX_H / dispH); dispH = MAX_H; }
+
+    // Initial crop box: centered, 4:3, 80% of display
+    let cropW = Math.round(dispW * 0.85);
+    let cropH = Math.round(cropW / RATIO);
+    if (cropH > dispH * 0.85) { cropH = Math.round(dispH * 0.85); cropW = Math.round(cropH * RATIO); }
+    let cropX = Math.round((dispW - cropW) / 2);
+    let cropY = Math.round((dispH - cropH) / 2);
+
+    cropState = { srcImg, dispW, dispH, cropX, cropY, cropW, cropH, field, RATIO, dragging: null, startX: 0, startY: 0, origCrop: null };
+
+    overlay.innerHTML =
+      '<div class="crop-title">Recadre ta photo (ratio 4:3)</div>' +
+      '<div class="crop-hint">Glisse la zone ou les poignées pour ajuster</div>' +
+      '<div class="crop-canvas-wrap" id="cropWrap" style="width:' + dispW + 'px;height:' + dispH + 'px">' +
+        '<canvas id="cropCanvas" width="' + dispW + '" height="' + dispH + '"></canvas>' +
+        '<div class="crop-selection" id="cropSel"></div>' +
+        '<div class="crop-handle" id="ch-tl" style="top:0;left:0" data-handle="tl"></div>' +
+        '<div class="crop-handle" id="ch-tr" style="top:0;right:0;transform:translate(50%,-50%)" data-handle="tr"></div>' +
+        '<div class="crop-handle" id="ch-bl" style="bottom:0;left:0;transform:translate(-50%,50%)" data-handle="bl"></div>' +
+        '<div class="crop-handle" id="ch-br" style="bottom:0;right:0;transform:translate(50%,50%)" data-handle="br"></div>' +
+      '</div>' +
+      '<div class="crop-btns">' +
+        '<button class="crop-btn-cancel" onclick="closeCropOverlay()">Annuler</button>' +
+        '<button class="crop-btn-ok" onclick="confirmCrop()">✓ Valider le recadrage</button>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+
+    // Draw image on canvas
+    const canvas = document.getElementById('cropCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(srcImg, 0, 0, dispW, dispH);
+
+    cropState.canvas = canvas;
+    cropState.ctx = ctx;
+    cropState.onDone = onDone;
+
+    updateCropUI();
+    setupCropDrag();
+  };
+  srcImg.src = imgUrl;
+}
+
+function updateCropUI() {
+  const { cropX, cropY, cropW, cropH } = cropState;
+  const sel = document.getElementById('cropSel');
+  if (!sel) return;
+  sel.style.cssText = 'position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,0.55);' +
+    'left:' + cropX + 'px;top:' + cropY + 'px;width:' + cropW + 'px;height:' + cropH + 'px;';
+  // position handles
+  const handles = { tl: [cropX, cropY], tr: [cropX+cropW, cropY], bl: [cropX, cropY+cropH], br: [cropX+cropW, cropY+cropH] };
+  Object.entries(handles).forEach(([k,[x,y]]) => {
+    const h = document.getElementById('ch-' + k);
+    if (h) h.style.cssText = 'position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;' +
+      'left:' + x + 'px;top:' + y + 'px;transform:translate(-50%,-50%);cursor:grab;pointer-events:all;';
+  });
+}
+
+function setupCropDrag() {
+  const wrap = document.getElementById('cropWrap');
+  if (!wrap) return;
+
+  function getPos(e) {
+    const r = wrap.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return { x: src.clientX - r.left, y: src.clientY - r.top };
+  }
+
+  function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+  function onStart(e) {
+    e.preventDefault();
+    const pos = getPos(e);
+    const handle = e.target.dataset && e.target.dataset.handle;
+    if (handle) {
+      cropState.dragging = handle;
+    } else if (e.target.id === 'cropSel' || e.target.id === 'cropCanvas') {
+      cropState.dragging = 'move';
+    } else { return; }
+    cropState.startX = pos.x;
+    cropState.startY = pos.y;
+    cropState.origCrop = { ...cropState };
+  }
+
+  function onMove(e) {
+    e.preventDefault();
+    if (!cropState.dragging) return;
+    const pos = getPos(e);
+    const dx = pos.x - cropState.startX;
+    const dy = pos.y - cropState.startY;
+    const { dispW, dispH, RATIO } = cropState;
+    let { cropX, cropY, cropW, cropH } = cropState.origCrop;
+
+    if (cropState.dragging === 'move') {
+      cropX = clamp(cropX + dx, 0, dispW - cropW);
+      cropY = clamp(cropY + dy, 0, dispH - cropH);
+      cropState.cropX = cropX; cropState.cropY = cropY;
+    } else {
+      // Resize maintaining 4:3 ratio — use dx as primary, compute dy from ratio
+      const d = cropState.dragging;
+      if (d === 'br') {
+        cropW = clamp(cropW + dx, 60, dispW - cropX);
+        cropH = Math.round(cropW / RATIO);
+        if (cropY + cropH > dispH) { cropH = dispH - cropY; cropW = Math.round(cropH * RATIO); }
+      } else if (d === 'tl') {
+        const newW = clamp(cropW - dx, 60, cropX + cropW);
+        cropH = Math.round(newW / RATIO);
+        cropX = (cropX + cropW) - newW;
+        cropY = (cropState.origCrop.cropY + cropState.origCrop.cropH) - cropH;
+        cropW = newW;
+      } else if (d === 'tr') {
+        cropW = clamp(cropW + dx, 60, dispW - cropX);
+        cropH = Math.round(cropW / RATIO);
+        cropY = (cropState.origCrop.cropY + cropState.origCrop.cropH) - cropH;
+      } else if (d === 'bl') {
+        const newW = clamp(cropW - dx, 60, cropX + cropW);
+        cropH = Math.round(newW / RATIO);
+        cropX = (cropX + cropW) - newW;
+        cropW = newW;
+      }
+      cropState.cropX = Math.round(clamp(cropX, 0, dispW - cropW));
+      cropState.cropY = Math.round(clamp(cropY, 0, dispH - cropH));
+      cropState.cropW = Math.round(cropW);
+      cropState.cropH = Math.round(cropH);
+    }
+    updateCropUI();
+  }
+
+  function onEnd() { cropState.dragging = null; }
+
+  wrap.addEventListener('mousedown', onStart);
+  wrap.addEventListener('touchstart', onStart, { passive: false });
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('mouseup', onEnd);
+  window.addEventListener('touchend', onEnd);
+}
+
+function closeCropOverlay() {
+  const el = document.getElementById('cropOverlay');
+  if (el) el.remove();
+  if (cropState && cropState.onDone) cropState.onDone();
+  cropState = null;
+}
+
+function confirmCrop() {
+  if (!cropState) return;
+  const { srcImg, dispW, dispH, cropX, cropY, cropW, cropH, field } = cropState;
+  // Map display coords back to source image coords
+  const scaleX = srcImg.width / dispW;
+  const scaleY = srcImg.height / dispH;
+  const sx = Math.round(cropX * scaleX);
+  const sy = Math.round(cropY * scaleY);
+  const sw = Math.round(cropW * scaleX);
+  const sh = Math.round(cropH * scaleY);
+  // Draw cropped region onto output canvas (max 800px wide)
+  const outW = Math.min(sw, 800);
+  const outH = Math.round(outW / (4/3));
+  const out = document.createElement('canvas');
+  out.width = outW; out.height = outH;
+  out.getContext('2d').drawImage(srcImg, sx, sy, sw, sh, 0, 0, outW, outH);
+  const result = out.toDataURL('image/jpeg', 0.82);
+  if (field === 'q') qImage = result; else aImage = result;
+  closeCropOverlay();
   renderImgZone(field);
 }
 
@@ -777,6 +977,11 @@ let quizQueue = [], quizIndex = 0, quizGood = 0, quizBad = 0;
 
 function startQuiz() {
   quizQueue = getDueCards(loadCards());
+  // shuffle Fisher-Yates
+  for (let i = quizQueue.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [quizQueue[i], quizQueue[j]] = [quizQueue[j], quizQueue[i]];
+  }
   quizIndex = 0; quizGood = 0; quizBad = 0;
   renderQuiz();
 }
