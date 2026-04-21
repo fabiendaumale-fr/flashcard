@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MémoCards</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Baloo+2:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4ff;
+    --surface: #ffffff;
+    --surface2: #f7f9ff;
+    --primary: #5b5ef4;
+    --primary-light: #eeeeff;
+    --primary-dark: #4040d0;
+    --success: #22c55e;
+    --success-light: #dcfce7;
+    --danger: #ef4444;
+    --danger-light: #fee2e2;
+    --text: #1e1b4b;
+    --text2: #6b7280;
+    --border: #e0e4f8;
+    --shadow: 0 4px 20px rgba(91,94,244,0.10);
+    --shadow-sm: 0 2px 8px rgba(91,94,244,0.08);
+    --radius: 20px;
+    --radius-sm: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding-bottom: 40px;
+  }
+  h1,h2,h3 { font-family: 'Baloo 2', sans-serif; }
+
+  /* ── HEADER ── */
+  .header {
+    background: var(--surface);
+    border-bottom: 1.5px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: var(--shadow-sm);
+  }
+  .logo { font-family: 'Baloo 2', sans-serif; font-size: 22px; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+  .logo-emoji { font-size: 24px; }
+  .back-btn { background: var(--primary-light); color: var(--primary); border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+  .back-btn:hover { background: var(--primary); color: #fff; }
+
+  /* ── PAGES ── */
+  .page { display: none; max-width: 600px; margin: 0 auto; padding: 24px 16px; }
+  .page.active { display: block; }
+
+  /* ── HOME ── */
+  .home-greeting { text-align: center; margin-bottom: 28px; }
+  .home-greeting h2 { font-size: 28px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+  .home-greeting p { font-size: 15px; color: var(--text2); }
+  .today-badge {
+    background: linear-gradient(135deg, var(--primary) 0%, #818cf8 100%);
+    color: #fff;
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(91,94,244,0.25);
+  }
+  .today-badge .count { font-size: 48px; font-weight: 900; font-family: 'Baloo 2',sans-serif; line-height: 1; }
+  .today-badge .label { font-size: 15px; font-weight: 600; opacity: 0.9; margin-top: 4px; }
+  .home-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 28px; }
+  .home-btn {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--shadow-sm);
+  }
+  .home-btn:hover { border-color: var(--primary); transform: translateY(-3px); box-shadow: var(--shadow); }
+  .home-btn.primary-btn { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .home-btn.primary-btn:hover { background: var(--primary-dark); }
+  .home-btn .btn-emoji { font-size: 32px; display: block; margin-bottom: 10px; }
+  .home-btn .btn-label { font-size: 15px; font-weight: 800; }
+  .home-btn .btn-sub { font-size: 12px; color: var(--text2); margin-top: 4px; font-weight: 600; }
+  .home-btn.primary-btn .btn-sub { color: rgba(255,255,255,0.75); }
+
+  /* Themes stats */
+  .section-title { font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 12px; }
+  .theme-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .theme-chip {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: 30px; padding: 6px 14px;
+    font-size: 13px; font-weight: 700; color: var(--text2);
+  }
+  .theme-chip span { font-size: 16px; }
+  .theme-chip strong { color: var(--primary); }
+
+  /* ── CREATE ── */
+  .form-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+    border: 1.5px solid var(--border);
+  }
+  .form-title { font-size: 20px; font-weight: 800; margin-bottom: 20px; }
+  .form-group { margin-bottom: 18px; }
+  label { font-size: 13px; font-weight: 800; color: var(--text2); display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  input[type=text], textarea, select {
+    width: 100%; background: var(--surface2);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 15px; color: var(--text);
+    transition: border-color 0.2s;
+    outline: none;
+    resize: vertical;
+  }
+  input[type=text]:focus, textarea:focus, select:focus { border-color: var(--primary); }
+  textarea { min-height: 90px; }
+  .theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .theme-option { display: none; }
+  .theme-label {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: var(--surface2); border: 2px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 6px;
+    cursor: pointer; transition: all 0.18s; text-align: center;
+  }
+  .theme-option:checked + .theme-label { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+  .theme-label .theme-icon { font-size: 22px; margin-bottom: 4px; }
+  .theme-label .theme-name { font-size: 11px; font-weight: 800; }
+  .btn-submit {
+    width: 100%; background: var(--primary);
+    color: #fff; border: none; border-radius: var(--radius-sm);
+    padding: 15px; font-family: 'Baloo 2', sans-serif;
+    font-size: 17px; font-weight: 700; cursor: pointer;
+    transition: all 0.2s; margin-top: 4px;
+  }
+  .btn-submit:hover { background: var(--primary-dark); transform: translateY(-1px); }
+  .btn-submit:active { transform: translateY(0); }
+
+  /* ── QUIZ ── */
+  .quiz-progress { margin-bottom: 20px; }
+  .progress-bar-bg { background: var(--border); border-radius: 10px; height: 8px; overflow: hidden; }
+  .progress-bar { background: linear-gradient(90deg, var(--primary), #818cf8); height: 8px; border-radius: 10px; transition: width 0.4s ease; }
+  .progress-label { font-size: 13px; font-weight: 700; color: var(--text2); margin-bottom: 6px; display: flex; justify-content: space-between; }
+
+  .quiz-card {
+    background: var(--surface); border-radius: var(--radius);
+    padding: 28px 24px; box-shadow: var(--shadow);
+    border: 1.5px solid var(--border);
+    min-height: 220px; display: flex; flex-direction: column;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  .quiz-card.flip-out { transform: rotateY(90deg); opacity: 0; }
+  .quiz-card.flip-in { transform: rotateY(0deg); opacity: 1; }
+
+  .quiz-theme-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--primary-light); color: var(--primary);
+    border-radius: 20px; padding: 4px 12px;
+    font-size: 12px; font-weight: 800; margin-bottom: 16px; align-self: flex-start;
+  }
+  .quiz-level { font-size: 12px; color: var(--text2); font-weight: 700; margin-left: auto; }
+  .quiz-question { font-size: 20px; font-weight: 800; line-height: 1.4; flex: 1; }
+  .quiz-answer { font-size: 17px; font-weight: 600; color: var(--text); line-height: 1.5; flex: 1; }
+  .answer-divider { border: none; border-top: 1.5px dashed var(--border); margin: 16px 0; }
+
+  .quiz-btns { display: flex; gap: 12px; margin-top: 24px; }
+  .btn-see {
+    width: 100%; background: var(--primary);
+    color: #fff; border: none; border-radius: var(--radius-sm);
+    padding: 14px; font-family: 'Baloo 2', sans-serif;
+    font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-see:hover { background: var(--primary-dark); }
+  .btn-good {
+    flex: 1; background: var(--success); color: #fff;
+    border: none; border-radius: var(--radius-sm);
+    padding: 14px 10px; font-family: 'Baloo 2', sans-serif;
+    font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-good:hover { background: #16a34a; transform: scale(1.03); }
+  .btn-bad {
+    flex: 1; background: var(--danger); color: #fff;
+    border: none; border-radius: var(--radius-sm);
+    padding: 14px 10px; font-family: 'Baloo 2', sans-serif;
+    font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-bad:hover { background: #dc2626; transform: scale(1.03); }
+
+  /* ── TOAST CELEBRATION ── */
+  .toast {
+    position: fixed; top: 80px; left: 50%; transform: translateX(-50%) translateY(-20px);
+    background: var(--surface); border-radius: var(--radius);
+    padding: 16px 24px; box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+    font-size: 16px; font-weight: 800; z-index: 999;
+    opacity: 0; transition: all 0.35s cubic-bezier(.34,1.56,.64,1);
+    border: 2px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--success); color: #15803d; background: var(--success-light); }
+  .toast.error { border-color: var(--danger); color: #b91c1c; background: var(--danger-light); }
+  .toast.win { border-color: #f59e0b; color: #92400e; background: #fef3c7; }
+
+  /* ── END SCREEN ── */
+  .end-screen { text-align: center; padding: 40px 20px; }
+  .end-trophy { font-size: 80px; margin-bottom: 16px; animation: bounce 0.6s ease; }
+  @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-20px)} }
+  .end-screen h2 { font-size: 28px; font-weight: 900; margin-bottom: 8px; }
+  .end-screen p { font-size: 16px; color: var(--text2); margin-bottom: 28px; }
+  .end-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; text-align: center; }
+  .end-stat { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 16px; }
+  .end-stat .n { font-size: 32px; font-weight: 900; font-family: 'Baloo 2', sans-serif; color: var(--primary); }
+  .end-stat .l { font-size: 13px; color: var(--text2); font-weight: 700; margin-top: 4px; }
+
+  /* ── CARDS LIST ── */
+  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .filter-btn {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: 20px; padding: 6px 14px;
+    font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: all 0.18s; color: var(--text2);
+  }
+  .filter-btn.active, .filter-btn:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+  .card-item {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm); padding: 16px;
+    margin-bottom: 10px; display: flex; align-items: flex-start; gap: 14px;
+    transition: box-shadow 0.2s;
+  }
+  .card-item:hover { box-shadow: var(--shadow); }
+  .card-item-icon { font-size: 26px; flex-shrink: 0; }
+  .card-item-body { flex: 1; min-width: 0; }
+  .card-item-q { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .card-item-a { font-size: 13px; color: var(--text2); }
+  .card-item-meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  .level-badge {
+    font-size: 11px; font-weight: 800; padding: 2px 8px;
+    border-radius: 10px; background: var(--primary-light); color: var(--primary);
+  }
+  .next-badge { font-size: 11px; font-weight: 700; color: var(--text2); }
+  .delete-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 16px; color: var(--text2); padding: 4px;
+    border-radius: 8px; transition: all 0.18s; flex-shrink: 0;
+  }
+  .delete-btn:hover { background: var(--danger-light); color: var(--danger); }
+
+  /* ── EMPTY STATE ── */
+  .empty-state { text-align: center; padding: 50px 20px; color: var(--text2); }
+  .empty-state .empty-icon { font-size: 60px; margin-bottom: 16px; }
+  .empty-state p { font-size: 15px; font-weight: 600; margin-bottom: 20px; }
+  .empty-state button {
+    background: var(--primary); color: #fff; border: none;
+    border-radius: var(--radius-sm); padding: 12px 24px;
+    font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+
+  .no-cards-today { text-align: center; padding: 40px 20px; }
+  .no-cards-today .icon { font-size: 64px; margin-bottom: 16px; }
+  .no-cards-today h3 { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+  .no-cards-today p { font-size: 15px; color: var(--text2); }
+
+  /* confetti */
+  .confetti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9999; overflow: hidden; }
+  .confetti-piece { position: absolute; width: 10px; height: 10px; border-radius: 2px; animation: confettiFall linear forwards; }
+  @keyframes confettiFall {
+    0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- CONFETTI -->
+<div class="confetti-container" id="confetti"></div>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo"><span class="logo-emoji">🧠</span> MémoCards</div>
+  <button class="back-btn" id="backBtn" style="display:none" onclick="goHome()">← Accueil</button>
+</div>
+
+<!-- PAGE: HOME -->
+<div class="page active" id="page-home">
+  <div class="home-greeting">
+    <h2 id="greetingText">Bonjour !</h2>
+    <p>Prêt à apprendre quelque chose aujourd'hui ?</p>
+  </div>
+
+  <div class="today-badge">
+    <div class="count" id="todayCount">0</div>
+    <div class="label">carte(s) à réviser aujourd'hui</div>
+  </div>
+
+  <div class="home-btns">
+    <div class="home-btn primary-btn" onclick="showPage('quiz')">
+      <span class="btn-emoji">🎯</span>
+      <div class="btn-label">Réviser</div>
+      <div class="btn-sub" id="reviseSubtext">mes cartes du jour</div>
+    </div>
+    <div class="home-btn" onclick="showPage('create')">
+      <span class="btn-emoji">✏️</span>
+      <div class="btn-label">Créer</div>
+      <div class="btn-sub">une nouvelle carte</div>
+    </div>
+  </div>
+
+  <div style="margin-bottom: 20px;">
+    <div class="section-title">Mes thèmes</div>
+    <div class="theme-chips" id="homeThemeChips"></div>
+  </div>
+
+  <div>
+    <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+      Toutes mes cartes
+      <span style="font-size:13px;font-weight:700;color:var(--primary);cursor:pointer" onclick="showPage('list')">Voir tout →</span>
+    </div>
+    <div id="homeRecentCards"></div>
+  </div>
+</div>
+
+<!-- PAGE: CREATE -->
+<div class="page" id="page-create">
+  <div class="form-card">
+    <div class="form-title">✏️ Nouvelle carte</div>
+    <div class="form-group">
+      <label>Question</label>
+      <textarea id="inputQuestion" placeholder="Quelle est la formule de l'eau ?"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Réponse</label>
+      <textarea id="inputAnswer" placeholder="H₂O"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Thème</label>
+      <div class="theme-grid" id="themeGrid"></div>
+    </div>
+    <button class="btn-submit" onclick="createCard()">🚀 Créer la carte</button>
+  </div>
+</div>
+
+<!-- PAGE: QUIZ -->
+<div class="page" id="page-quiz">
+  <div id="quizContent"></div>
+</div>
+
+<!-- PAGE: LIST -->
+<div class="page" id="page-list">
+  <div class="filter-bar" id="listFilters"></div>
+  <div id="listContent"></div>
+</div>
+
+<script>
+const THEMES = [
+  { key: 'maths',    label: 'Maths',          icon: '🔢' },
+  { key: 'sciences', label: 'Sciences',        icon: '🔬' },
+  { key: 'litt',     label: 'Littérature',     icon: '📚' },
+  { key: 'francais', label: 'Français',        icon: '🖊️' },
+  { key: 'espagnol', label: 'Espagnol',        icon: '🌍' },
+  { key: 'histoire', label: 'Histoire',        icon: '🏛️' },
+  { key: 'geo',      label: 'Géographie',      icon: '🗺️' },
+  { key: 'sport',    label: 'Sport',           icon: '⚽' },
+  { key: 'culture',  label: 'Culture générale',icon: '💡' },
+];
+const LEVELS = [1,2,4,8,16,32,64];
+const LEVEL_LABELS = ['J+1','J+2','J+4','J+8','J+16','J+32','J+64'];
+
+function today() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+function loadCards() {
+  return JSON.parse(localStorage.getItem('memocards_v1') || '[]');
+}
+function saveCards(cards) {
+  localStorage.setItem('memocards_v1', JSON.stringify(cards));
+}
+
+function getTheme(key) { return THEMES.find(t => t.key === key) || {label: key, icon: '❓'}; }
+
+function getDueCards(cards) {
+  const t = today();
+  return cards.filter(c => {
+    if (c.levelIndex >= LEVELS.length) return false;
+    const due = c.lastReview + LEVELS[c.levelIndex] * 86400000;
+    return due <= t;
+  }).sort((a,b) => {
+    const ai = a.levelIndex, bi = b.levelIndex;
+    return ai - bi;
+  });
+}
+
+function daysUntilNext(card) {
+  if (card.levelIndex >= LEVELS.length) return null;
+  const due = card.lastReview + LEVELS[card.levelIndex] * 86400000;
+  const diff = Math.ceil((due - today()) / 86400000);
+  return diff;
+}
+
+// ── PAGES ──
+let currentPage = 'home';
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('backBtn').style.display = name === 'home' ? 'none' : '';
+  currentPage = name;
+  if (name === 'home') renderHome();
+  if (name === 'create') renderCreate();
+  if (name === 'quiz') startQuiz();
+  if (name === 'list') renderList(null);
+}
+function goHome() { showPage('home'); }
+
+// ── HOME ──
+function renderHome() {
+  const cards = loadCards();
+  const due = getDueCards(cards);
+  document.getElementById('todayCount').textContent = due.length;
+  document.getElementById('reviseSubtext').textContent = due.length > 0 ? `${due.length} carte(s) aujourd'hui` : 'rien à faire !';
+
+  const h = new Date().getHours();
+  const greet = h < 12 ? 'Bonjour !' : h < 18 ? 'Bon après-midi !' : 'Bonsoir !';
+  document.getElementById('greetingText').textContent = greet;
+
+  // theme chips
+  const counts = {};
+  cards.forEach(c => { counts[c.theme] = (counts[c.theme]||0) + 1; });
+  const chipsEl = document.getElementById('homeThemeChips');
+  if (Object.keys(counts).length === 0) {
+    chipsEl.innerHTML = '<span style="color:var(--text2);font-size:13px;font-weight:600">Aucune carte pour l\'instant</span>';
+  } else {
+    chipsEl.innerHTML = Object.entries(counts).map(([k,n]) => {
+      const t = getTheme(k);
+      return `<div class="theme-chip"><span>${t.icon}</span>${t.label} <strong>${n}</strong></div>`;
+    }).join('');
+  }
+
+  // recent cards
+  const recentEl = document.getElementById('homeRecentCards');
+  if (cards.length === 0) {
+    recentEl.innerHTML = '<div class="empty-state"><div class="empty-icon">🌱</div><p>Commence par créer ta première carte !</p><button onclick="showPage(\'create\')">Créer une carte</button></div>';
+  } else {
+    recentEl.innerHTML = cards.slice(-3).reverse().map(c => cardItemHTML(c)).join('');
+  }
+}
+
+function cardItemHTML(c) {
+  const t = getTheme(c.theme);
+  const li = c.levelIndex;
+  const done = li >= LEVELS.length;
+  const days = daysUntilNext(c);
+  const nextLabel = done ? '✅ Apprise !' : (days !== null && days <= 0 ? '🔥 À réviser' : `⏳ dans ${days}j`);
+  return `<div class="card-item">
+    <div class="card-item-icon">${t.icon}</div>
+    <div class="card-item-body">
+      <div class="card-item-q">${escHtml(c.question)}</div>
+      <div class="card-item-a">${escHtml(c.answer)}</div>
+      <div class="card-item-meta">
+        <span class="level-badge">${done ? '🏆 Maîtrisée' : LEVEL_LABELS[li] || '?'}</span>
+        <span class="next-badge">${nextLabel}</span>
+      </div>
+    </div>
+    <button class="delete-btn" onclick="deleteCard('${c.id}',event)" title="Supprimer">🗑️</button>
+  </div>`;
+}
+
+function deleteCard(id, e) {
+  e.stopPropagation();
+  if (!confirm('Supprimer cette carte ?')) return;
+  let cards = loadCards();
+  cards = cards.filter(c => c.id !== id);
+  saveCards(cards);
+  renderHome();
+  if (currentPage === 'list') renderList(activeFilter);
+}
+
+// ── CREATE ──
+let selectedTheme = null;
+function renderCreate() {
+  selectedTheme = null;
+  document.getElementById('inputQuestion').value = '';
+  document.getElementById('inputAnswer').value = '';
+  const grid = document.getElementById('themeGrid');
+  grid.innerHTML = THEMES.map(t => `
+    <div>
+      <input type="radio" name="theme" id="th_${t.key}" class="theme-option" value="${t.key}" onchange="selectedTheme='${t.key}'">
+      <label class="theme-label" for="th_${t.key}">
+        <span class="theme-icon">${t.icon}</span>
+        <span class="theme-name">${t.label}</span>
+      </label>
+    </div>
+  `).join('');
+}
+
+function createCard() {
+  const q = document.getElementById('inputQuestion').value.trim();
+  const a = document.getElementById('inputAnswer').value.trim();
+  if (!q) { showToast('⚠️ Écris une question !', 'error'); return; }
+  if (!a) { showToast('⚠️ Écris une réponse !', 'error'); return; }
+  if (!selectedTheme) { showToast('⚠️ Choisis un thème !', 'error'); return; }
+  const cards = loadCards();
+  const card = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    question: q, answer: a, theme: selectedTheme,
+    createdAt: today(),
+    lastReview: today() - 86400000, // due tomorrow (J+1)
+    levelIndex: 0,
+  };
+  cards.push(card);
+  saveCards(cards);
+  showToast('🎉 Carte créée !', 'success');
+  launchConfetti(8);
+  setTimeout(() => { renderCreate(); }, 400);
+}
+
+// ── QUIZ ──
+let quizQueue = [];
+let quizIndex = 0;
+let quizGood = 0;
+let quizBad = 0;
+let quizAnswerShown = false;
+
+function startQuiz() {
+  const cards = loadCards();
+  quizQueue = getDueCards(cards);
+  quizIndex = 0; quizGood = 0; quizBad = 0;
+  renderQuiz();
+}
+
+function renderQuiz() {
+  const el = document.getElementById('quizContent');
+  if (quizQueue.length === 0) {
+    el.innerHTML = `<div class="no-cards-today">
+      <div class="icon">🌟</div>
+      <h3>Rien à réviser aujourd'hui !</h3>
+      <p>Crée de nouvelles cartes ou reviens demain.</p>
+    </div>`;
+    return;
+  }
+  if (quizIndex >= quizQueue.length) {
+    renderQuizEnd();
+    return;
+  }
+
+  const card = quizQueue[quizIndex];
+  const t = getTheme(card.theme);
+  const li = card.levelIndex;
+  const total = quizQueue.length;
+
+  el.innerHTML = `
+    <div class="quiz-progress">
+      <div class="progress-label">
+        <span>Carte ${quizIndex + 1} / ${total}</span>
+        <span>✅ ${quizGood} · ❌ ${quizBad}</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar" style="width:${(quizIndex/total)*100}%"></div>
+      </div>
+    </div>
+    <div class="quiz-card" id="quizCard">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+        <div class="quiz-theme-badge">${t.icon} ${t.label}</div>
+        <div class="quiz-level">Niveau ${LEVEL_LABELS[li]||'?'}</div>
+      </div>
+      <div class="quiz-question">${escHtml(card.question)}</div>
+      <div id="quizAnswerZone"></div>
+    </div>`;
+
+  document.getElementById('quizAnswerZone').innerHTML = `
+    <div style="margin-top:24px">
+      <button class="btn-see" onclick="showAnswer()">👁️ Voir la réponse</button>
+    </div>`;
+}
+
+function showAnswer() {
+  const card = quizQueue[quizIndex];
+  document.getElementById('quizAnswerZone').innerHTML = `
+    <hr class="answer-divider">
+    <div class="quiz-answer">${escHtml(card.answer)}</div>
+    <div class="quiz-btns">
+      <button class="btn-bad" onclick="answerCard(false)">😬 Raté !</button>
+      <button class="btn-good" onclick="answerCard(true)">✅ J'ai bon !</button>
+    </div>`;
+}
+
+function answerCard(correct) {
+  const cards = loadCards();
+  const card = quizQueue[quizIndex];
+  const idx = cards.findIndex(c => c.id === card.id);
+
+  if (correct) {
+    quizGood++;
+    const newLevel = card.levelIndex + 1;
+    if (newLevel >= LEVELS.length) {
+      showToast('🏆 Carte maîtrisée !', 'win');
+      launchConfetti(20);
+      cards[idx].levelIndex = LEVELS.length;
+      cards[idx].lastReview = today();
+    } else {
+      showToast('🎉 Bravo !', 'success');
+      // Elapsed time since due date → keep the delay relative
+      const due = card.lastReview + LEVELS[card.levelIndex] * 86400000;
+      const elapsed = today() - due; // could be 0 or positive if late
+      cards[idx].lastReview = today() - elapsed; // anchor from today minus the delay offset
+      cards[idx].levelIndex = newLevel;
+    }
+  } else {
+    quizBad++;
+    showToast('😅 Pas grave, on réessaie !', 'error');
+    cards[idx].levelIndex = 0;
+    cards[idx].lastReview = today() - 86400000; // back to J+1
+  }
+
+  saveCards(cards);
+  // animate card out
+  const cardEl = document.getElementById('quizCard');
+  if (cardEl) { cardEl.style.transform = correct ? 'translateX(60px)' : 'translateX(-60px)'; cardEl.style.opacity = '0'; cardEl.style.transition = 'all 0.3s'; }
+  quizIndex++;
+  setTimeout(() => renderQuiz(), 300);
+}
+
+function renderQuizEnd() {
+  const total = quizGood + quizBad;
+  const pct = total > 0 ? Math.round((quizGood/total)*100) : 100;
+  const emoji = pct === 100 ? '🏆' : pct >= 70 ? '🌟' : '💪';
+  const msg = pct === 100 ? 'Parfait ! Tu es au top !' : pct >= 70 ? 'Très bien joué !' : 'Continue, tu progresses !';
+  launchConfetti(pct === 100 ? 30 : 10);
+  document.getElementById('quizContent').innerHTML = `
+    <div class="end-screen">
+      <div class="end-trophy">${emoji}</div>
+      <h2>${msg}</h2>
+      <p>Session terminée !</p>
+      <div class="end-stats">
+        <div class="end-stat"><div class="n" style="color:var(--success)">${quizGood}</div><div class="l">Bonnes réponses</div></div>
+        <div class="end-stat"><div class="n" style="color:var(--danger)">${quizBad}</div><div class="l">À retravailler</div></div>
+        <div class="end-stat"><div class="n">${total}</div><div class="l">Cartes révisées</div></div>
+        <div class="end-stat"><div class="n">${pct}%</div><div class="l">Score</div></div>
+      </div>
+      <button class="btn-submit" onclick="goHome()">🏠 Retour à l'accueil</button>
+    </div>`;
+}
+
+// ── LIST ──
+let activeFilter = null;
+function renderList(filter) {
+  activeFilter = filter;
+  const cards = loadCards();
+  const filtersEl = document.getElementById('listFilters');
+  const used = [...new Set(cards.map(c => c.theme))];
+  filtersEl.innerHTML = `<button class="filter-btn ${!filter?'active':''}" onclick="renderList(null)">Tous (${cards.length})</button>` +
+    used.map(k => { const t = getTheme(k); const n = cards.filter(c=>c.theme===k).length; return `<button class="filter-btn ${filter===k?'active':''}" onclick="renderList('${k}')">${t.icon} ${t.label} (${n})</button>`; }).join('');
+
+  const filtered = filter ? cards.filter(c => c.theme === filter) : cards;
+  const el = document.getElementById('listContent');
+  if (filtered.length === 0) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><p>Aucune carte ici.</p><button onclick="showPage('create')">Créer une carte</button></div>`;
+    return;
+  }
+  el.innerHTML = filtered.slice().reverse().map(c => cardItemHTML(c)).join('');
+}
+
+// ── TOAST ──
+let toastTimer;
+function showToast(msg, type='success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); }, 2200);
+}
+
+// ── CONFETTI ──
+function launchConfetti(count) {
+  const el = document.getElementById('confetti');
+  el.innerHTML = '';
+  const colors = ['#5b5ef4','#22c55e','#f59e0b','#ef4444','#818cf8','#a3e635','#fb923c'];
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement('div');
+    p.className = 'confetti-piece';
+    p.style.left = Math.random()*100 + 'vw';
+    p.style.background = colors[Math.floor(Math.random()*colors.length)];
+    p.style.animationDuration = (1.2 + Math.random()*1.5) + 's';
+    p.style.animationDelay = Math.random()*0.5 + 's';
+    p.style.transform = `rotate(${Math.random()*360}deg)`;
+    el.appendChild(p);
+  }
+  setTimeout(() => { el.innerHTML = ''; }, 3000);
+}
+
+// ── UTILS ──
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── INIT ──
+renderHome();
+</script>
+</body>
+</html>
