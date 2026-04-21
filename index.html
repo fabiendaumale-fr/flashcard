@@ -661,7 +661,21 @@ function cardItemHTML(c) {
   const t = getTheme(c.theme);
   const done = c.levelIndex >= LEVELS.length;
   const days = daysUntilNext(c);
-  const nextLabel = done ? '✅ Apprise !' : (days !== null && days <= 0 ? '🔥 À réviser' : `⏳ dans ${days}j`);
+  const session = loadSession();
+  const selectedReserveIds = new Set(session.reserveIds || []);
+  const doneTodayIds = new Set(session.done || []);
+  let nextLabel;
+  if (done) {
+    nextLabel = '✅ Apprise !';
+  } else if (doneTodayIds.has(c.id)) {
+    nextLabel = '✓ Fait aujourd\'hui';
+  } else if (c.levelIndex === 0 && !selectedReserveIds.has(c.id)) {
+    nextLabel = '📦 En réserve';
+  } else if (days !== null && days <= 0) {
+    nextLabel = '🔥 À réviser';
+  } else {
+    nextLabel = `⏳ dans ${days}j`;
+  }
   const qContent = c.questionImg
     ? `<img src="${c.questionImg}" style="width:100%;max-height:80px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border);display:block;margin-bottom:4px;">`
     : `<div class="card-item-q">${escHtml(c.question)}</div>`;
