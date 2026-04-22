@@ -390,16 +390,61 @@ function today() {
 }
 
 // ── STORAGE ──
+// Data format in Drive: { cards: [...], session: { date, done, reserveIds, reserveInitialized } }
+// localStorage is just a cache of the same structure.
+
+function getTodayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function loadData() {
+  try { return JSON.parse(localStorage.getItem('memocards_data') || '{"cards":[],"session":{}}'); }
+  catch(e) { return { cards: [], session: {} }; }
+}
+
 function loadCards() {
-  return JSON.parse(localStorage.getItem('memocards_v1') || '[]');
+  // Legacy support: migrate old format
+  const raw = localStorage.getItem('memocards_data');
+  if (!raw) {
+    const legacyCards = JSON.parse(localStorage.getItem('memocards_v1') || '[]');
+    return legacyCards;
+  }
+  try {
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : (data.cards || []);
+  } catch(e) { return []; }
 }
-function saveCardsLocal(cards) {
-  localStorage.setItem('memocards_v1', JSON.stringify(cards));
+
+function loadSession() {
+  const data = loadData();
+  const session = Array.isArray(data) ? {} : (data.session || {});
+  // Reset session if it's from a previous day
+  if (session.date !== getTodayStr()) return {};
+  return session;
 }
+
+function saveDataLocal(cards, session) {
+  localStorage.setItem('memocards_data', JSON.stringify({ cards, session }));
+}
+
+function saveSession(session) {
+  const cards = loadCards();
+  saveDataLocal(cards, { ...session, date: getTodayStr() });
+}
+
 async function saveCards(cards) {
-  saveCardsLocal(cards);
+  const session = loadSession();
+  saveDataLocal(cards, session);
   if (useGoogleDrive && accessToken) {
-    await syncToDrive(cards);
+    await syncToDrive(cards, session);
+  }
+}
+
+async function saveCardAndSession(cards, session) {
+  saveDataLocal(cards, { ...session, date: getTodayStr() });
+  if (useGoogleDrive && accessToken) {
+    await syncToDrive(cards, session);
   }
 }
 
@@ -433,7 +478,7 @@ function useLocal() {
 
 function handleSyncClick() {
   if (useGoogleDrive && accessToken) {
-    syncToDrive(loadCards()).then(() => showToast('☁️ Synchronisé !', 'success'));
+    syncToDrive(loadCards(), loadSession()).then(() => showToast('☁️ Synchronisé !', 'success'));
   } else if (useGoogleDrive) {
     signInWithGoogle();
   } else {
@@ -452,7 +497,6 @@ async function driveRequest(url, method, body, contentType) {
 
 async function loadFromDrive() {
   try {
-    // find existing file
     const listRes = await driveRequest(
       'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%22' + FILE_NAME + '%22&fields=files(id)',
       'GET'
@@ -465,13 +509,20 @@ async function loadFromDrive() {
         'GET'
       );
       const data = await fileRes.json();
-      if (data && Array.isArray(data)) {
-        saveCardsLocal(data);
+      if (data) {
+        // Handle both old format (array) and new format ({cards, session})
+        if (Array.isArray(data)) {
+          saveDataLocal(data, {});
+        } else {
+          const session = data.session || {};
+          // Reset session if from another day
+          const validSession = session.date === getTodayStr() ? session : {};
+          saveDataLocal(data.cards || [], validSession);
+        }
         showToast('☁️ Données chargées depuis Drive', 'success');
       }
     } else {
-      // no file yet — push local data
-      await syncToDrive(loadCards());
+      await syncToDrive(loadCards(), loadSession());
     }
   } catch(e) {
     showToast('⚠️ Erreur Drive, mode local activé', 'error');
@@ -480,10 +531,11 @@ async function loadFromDrive() {
   }
 }
 
-async function syncToDrive(cards) {
+async function syncToDrive(cards, session) {
   setSyncStatus('syncing', 'Sync...');
   try {
-    const content = JSON.stringify(cards);
+    const payload = { cards, session: { ...(session||{}), date: getTodayStr() } };
+    const content = JSON.stringify(payload);
     const boundary = 'memocards_boundary';
     const metadata = JSON.stringify({ name: FILE_NAME, parents: ['appDataFolder'] });
 
@@ -524,22 +576,7 @@ function getTheme(key) { return THEMES.find(t => t.key === key) || { label: key,
 
 const MAX_RESERVE_PER_DAY = 20;
 
-function getSessionKey() {
-  // Key for today's session data: "session_YYYY-MM-DD"
-  const d = new Date();
-  return 'memocards_session_' + d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
-
-function loadSession() {
-  try { return JSON.parse(localStorage.getItem(getSessionKey()) || '{}'); } catch(e) { return {}; }
-}
-
-function saveSession(data) {
-  // Clean up old session keys (keep only today)
-  const key = getSessionKey();
-  Object.keys(localStorage).filter(k => k.startsWith('memocards_session_') && k !== key).forEach(k => localStorage.removeItem(k));
-  localStorage.setItem(key, JSON.stringify(data));
-}
+// session functions now in STORAGE block above
 
 function getDueCards(cards) {
   const t = today();
@@ -569,7 +606,9 @@ function getDueCards(cards) {
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
     const drawn = pool.slice(0, MAX_RESERVE_PER_DAY).map(c => c.id);
-    saveSession({ ...session, reserveIds: drawn, reserveInitialized: true });
+    const newSession = { ...session, reserveIds: drawn, reserveInitialized: true, date: getTodayStr() };
+    saveSession(newSession);
+    if (useGoogleDrive && accessToken) syncToDrive(loadCards(), newSession);
     const drawnSet = new Set(drawn);
     const reserve = cards.filter(c => drawnSet.has(c.id) && !doneTodayIds.has(c.id));
     return [...inPlay, ...reserve];
@@ -585,11 +624,13 @@ function getDueCards(cards) {
   return [...inPlay, ...reserve];
 }
 
-function markCardDoneToday(id) {
+async function markCardDoneToday(id) {
   const session = loadSession();
   const done = new Set(session.done || []);
   done.add(id);
-  saveSession({ ...session, done: [...done] });
+  const newSession = { ...session, done: [...done], date: getTodayStr() };
+  saveSession(newSession);
+  if (useGoogleDrive && accessToken) await syncToDrive(loadCards(), newSession);
 }
 
 function getRemainingCount() {
@@ -1278,10 +1319,12 @@ async function importCards(event) {
   try {
     const text = await file.text();
     const imported = JSON.parse(text);
-    if (!Array.isArray(imported)) throw new Error('Format invalide');
+    // Handle both array format and {cards,session} format
+    const importedCards = Array.isArray(imported) ? imported : (imported.cards || []);
+    if (!Array.isArray(importedCards)) throw new Error('Format invalide');
     const existing = loadCards();
     const existingIds = new Set(existing.map(c => c.id));
-    const newCards = imported.filter(c => !existingIds.has(c.id));
+    const newCards = importedCards.filter(c => !existingIds.has(c.id));
     const merged = [...existing, ...newCards];
     await saveCards(merged);
     showToast(`🎉 ${newCards.length} carte(s) importée(s) !`, 'success');
