@@ -516,7 +516,7 @@ async function loadFromDrive() {
         } else {
           const session = data.session || {};
           // Reset session if from another day
-          const validSession = session.date === getTodayStr() ? session : {};
+          const validSession = (session.initialized && session.date === getTodayStr()) ? session : {};
           saveDataLocal(data.cards || [], validSession);
         }
         showToast('☁️ Données chargées depuis Drive', 'success');
@@ -574,61 +574,77 @@ function setSyncStatus(cls, label) {
 // ── HELPERS ──
 function getTheme(key) { return THEMES.find(t => t.key === key) || { label: key, icon: '❓' }; }
 
-const MAX_RESERVE_PER_DAY = 20;
+const MAX_PER_DAY = 20;
 
 // session functions now in STORAGE block above
 
-function getDueCards(cards) {
+// ── DAILY SESSION LOGIC ──
+// Rule: max MAX_PER_DAY cards per day total.
+// Priority: highest level first (in-play cards), then reserve (level 0) to fill up to max.
+// Session is frozen at first call of the day and synced to Drive.
+
+function buildDaySession(cards, existingSession) {
   const t = today();
-  const session = loadSession();
+  const doneTodayIds = new Set(existingSession.done || []);
+
+  // 1. In-play cards: level > 0, not mastered, due today, not done today
+  // Sort by level descending (highest priority first)
+  const inPlay = cards
+    .filter(c =>
+      c.levelIndex > 0 &&
+      c.levelIndex < LEVELS.length &&
+      (c.lastReview + LEVELS[c.levelIndex] * 86400000) <= t
+    )
+    .sort((a, b) => b.levelIndex - a.levelIndex)
+    .map(c => c.id);
+
+  // 2. Reserve slots: fill up to MAX_PER_DAY with random level-0 cards
+  const slotsLeft = Math.max(0, MAX_PER_DAY - inPlay.length);
+  const pool = cards.filter(c =>
+    c.levelIndex === 0 &&
+    !inPlay.includes(c.id)
+  );
+  // shuffle
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const reserve = pool.slice(0, slotsLeft).map(c => c.id);
+
+  return {
+    date: getTodayStr(),
+    inPlayIds: inPlay,
+    reserveIds: reserve,
+    done: existingSession.done || [],
+    initialized: true
+  };
+}
+
+function getSessionCards(cards, session) {
   const doneTodayIds = new Set(session.done || []);
+  const allIds = new Set([...(session.inPlayIds || []), ...(session.reserveIds || [])]);
+  return cards.filter(c => allIds.has(c.id) && !doneTodayIds.has(c.id));
+}
 
-  // Cards in play (level > 0, not mastered, due today, not done)
-  const inPlay = cards.filter(c =>
-    c.levelIndex > 0 &&
-    c.levelIndex < LEVELS.length &&
-    (c.lastReview + LEVELS[c.levelIndex] * 86400000) <= t &&
-    !doneTodayIds.has(c.id)
-  ).sort((a,b) => b.levelIndex - a.levelIndex);
+function getDueCards(cards) {
+  let session = loadSession();
 
-  // Reserve: only use what was already drawn today
-  const selectedReserveIds = new Set(session.reserveIds || []);
-
-  // First call of the day: reserveIds not yet set → draw once and freeze
-  if (!session.reserveInitialized) {
-    const pool = cards.filter(c =>
-      c.levelIndex === 0 &&
-      c.levelIndex < LEVELS.length
-    );
-    // shuffle pool
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    const drawn = pool.slice(0, MAX_RESERVE_PER_DAY).map(c => c.id);
-    const newSession = { ...session, reserveIds: drawn, reserveInitialized: true, date: getTodayStr() };
-    saveSession(newSession);
-    if (useGoogleDrive && accessToken) syncToDrive(loadCards(), newSession);
-    const drawnSet = new Set(drawn);
-    const reserve = cards.filter(c => drawnSet.has(c.id) && !doneTodayIds.has(c.id));
-    return [...inPlay, ...reserve];
+  // Build/rebuild session if not initialized for today
+  if (!session.initialized || session.date !== getTodayStr()) {
+    session = buildDaySession(cards, session);
+    saveSession(session);
+    // Async sync to Drive (don't await to not block UI)
+    if (useGoogleDrive && accessToken) syncToDrive(cards, session);
   }
 
-  // Subsequent calls: just read the frozen list
-  const reserve = cards.filter(c =>
-    c.levelIndex === 0 &&
-    selectedReserveIds.has(c.id) &&
-    !doneTodayIds.has(c.id)
-  );
-
-  return [...inPlay, ...reserve];
+  return getSessionCards(cards, session);
 }
 
 async function markCardDoneToday(id) {
   const session = loadSession();
   const done = new Set(session.done || []);
   done.add(id);
-  const newSession = { ...session, done: [...done], date: getTodayStr() };
+  const newSession = { ...session, done: [...done] };
   saveSession(newSession);
   if (useGoogleDrive && accessToken) await syncToDrive(loadCards(), newSession);
 }
@@ -1202,20 +1218,23 @@ async function answerCard(correct) {
       cards[idx].lastReview = today();
     } else {
       showToast('🎉 Bravo !', 'success');
-      const due = card.lastReview + LEVELS[card.levelIndex] * 86400000;
-      const elapsed = today() - due;
-      cards[idx].lastReview = today() - elapsed;
+      cards[idx].lastReview = today();
       cards[idx].levelIndex = newLevel;
     }
   } else {
     quizBad++;
     showToast('😅 Pas grave, on réessaie !', 'error');
     cards[idx].levelIndex = 0;
-    cards[idx].lastReview = today() - 86400000;
+    cards[idx].lastReview = today();
   }
 
-  await saveCards(cards);
-  markCardDoneToday(card.id);
+  // Mark done in session first, then save cards + session atomically
+  const sessionAfter = loadSession();
+  const doneSet = new Set(sessionAfter.done || []);
+  doneSet.add(card.id);
+  const newSession = { ...sessionAfter, done: [...doneSet] };
+  saveDataLocal(cards, newSession);
+  if (useGoogleDrive && accessToken) await syncToDrive(cards, newSession);
   const cardEl = document.getElementById('quizCard');
   if (cardEl) { cardEl.style.cssText += `;transform:translateX(${correct?60:-60}px);opacity:0;transition:all 0.3s`; }
   quizIndex++;
