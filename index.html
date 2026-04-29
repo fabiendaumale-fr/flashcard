@@ -588,25 +588,22 @@ const MAX_PER_DAY = 20;
 
 function buildDaySession(cards, existingSession) {
   const t = today();
-  const doneTodayIds = new Set(existingSession.done || []);
 
-  // 1. In-play cards: level > 0, not mastered, due today, not done today
-  // Sort by level descending (highest priority first)
-  const inPlay = cards
+  // 1. In-play cards: level > 0, not mastered, due today
+  // Sort by level descending (highest priority first), cap at MAX_PER_DAY
+  const inPlayAll = cards
     .filter(c =>
       c.levelIndex > 0 &&
       c.levelIndex < LEVELS.length &&
       (c.lastReview + LEVELS[c.levelIndex] * 86400000) <= t
     )
-    .sort((a, b) => b.levelIndex - a.levelIndex)
-    .map(c => c.id);
+    .sort((a, b) => b.levelIndex - a.levelIndex);
 
-  // 2. Reserve slots: fill up to MAX_PER_DAY with random level-0 cards
+  const inPlay = inPlayAll.slice(0, MAX_PER_DAY).map(c => c.id);
+
+  // 2. Reserve slots: fill remaining slots with random level-0 cards
   const slotsLeft = Math.max(0, MAX_PER_DAY - inPlay.length);
-  const pool = cards.filter(c =>
-    c.levelIndex === 0 &&
-    !inPlay.includes(c.id)
-  );
+  const pool = cards.filter(c => c.levelIndex === 0);
   // shuffle
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
