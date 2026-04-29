@@ -360,7 +360,7 @@
 <script>
 // ── CONFIG ──
 const CLIENT_ID = '755062088072-00b5v5lu7f4smtuqs8munksdl7ifonbl.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const FILE_NAME = 'memocards_data.json';
 
 const THEMES = [
@@ -497,8 +497,10 @@ async function driveRequest(url, method, body, contentType) {
 
 async function loadFromDrive() {
   try {
+    // Search for file in Drive root (drive.file scope)
+    const q = encodeURIComponent("name='" + FILE_NAME + "' and trashed=false");
     const listRes = await driveRequest(
-      'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%22' + FILE_NAME + '%22&fields=files(id)',
+      'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)&spaces=drive',
       'GET'
     );
     const list = await listRes.json();
@@ -510,21 +512,22 @@ async function loadFromDrive() {
       );
       const data = await fileRes.json();
       if (data) {
-        // Handle both old format (array) and new format ({cards, session})
         if (Array.isArray(data)) {
           saveDataLocal(data, {});
         } else {
           const session = data.session || {};
-          // Reset session if from another day
           const validSession = (session.initialized && session.date === getTodayStr()) ? session : {};
           saveDataLocal(data.cards || [], validSession);
         }
         showToast('☁️ Données chargées depuis Drive', 'success');
       }
     } else {
+      // No file yet — create one with current local data
       await syncToDrive(loadCards(), loadSession());
+      showToast('☁️ Fichier Drive créé', 'success');
     }
   } catch(e) {
+    console.error('Drive error:', e);
     showToast('⚠️ Erreur Drive, mode local activé', 'error');
     useGoogleDrive = false;
     setSyncStatus('', 'Local');
@@ -537,7 +540,7 @@ async function syncToDrive(cards, session) {
     const payload = { cards, session: { ...(session||{}), date: getTodayStr() } };
     const content = JSON.stringify(payload);
     const boundary = 'memocards_boundary';
-    const metadata = JSON.stringify({ name: FILE_NAME, parents: ['appDataFolder'] });
+    const metadata = JSON.stringify({ name: FILE_NAME });
 
     if (!driveFileId) {
       // create
